@@ -23,12 +23,26 @@ app.use(cors());
 app.use(express.json());
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/chat-app', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('Connected to MongoDB'))
-.catch(err => console.error('MongoDB connection error:', err));
+let cachedDb = null;
+
+async function connectToDatabase() {
+  if (cachedDb) {
+    return cachedDb;
+  }
+
+  try {
+    const db = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/chat-app', {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    cachedDb = db;
+    console.log('Connected to MongoDB');
+    return db;
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    throw err;
+  }
+}
 
 // Routes
 const authRoutes = require('../routes/authRoutes');
@@ -48,8 +62,13 @@ app.get('/', (req, res) => {
   res.send('Chat App Backend is running');
 });
 
-// Start server
-const PORT = process.env.PORT || 8000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-}); 
+// Export the Express app as a serverless function
+module.exports = async (req, res) => {
+  try {
+    await connectToDatabase();
+    return app(req, res);
+  } catch (error) {
+    console.error('Error handling request:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}; 
